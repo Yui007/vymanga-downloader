@@ -38,7 +38,10 @@ class Chapter:
     @property
     def chapter_folder_name(self) -> str:
         """Generate a clean folder name for this chapter."""
-        return f"Chapter_{self.number:.1f}"
+        if self.number.is_integer():
+            return f"Chapter_{int(self.number)}"
+        else:
+            return f"Chapter_{self.number:.1f}"
 
     def add_page(self, page_url: str, page_number: int) -> Page:
         """Add a page to this chapter."""

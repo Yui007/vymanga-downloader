@@ -10,6 +10,7 @@ from bs4 import BeautifulSoup
 from urllib.parse import urljoin, urlparse
 from typing import List, Optional, Dict, Any
 import re
+from concurrent.futures import ThreadPoolExecutor, as_completed
 
 from models import Manga, Chapter, Page
 from utils import logger, is_valid_image_url
@@ -334,12 +335,13 @@ class VymangaScraper:
             logger.error(f"Error scraping chapter pages with Playwright: {e}")
             return False
 
-    def scrape_manga_with_chapters(self, manga_url: str) -> Optional[Manga]:
+    def scrape_manga_with_chapters(self, manga_url: str, max_workers: int = 3) -> Optional[Manga]:
         """
-        Scrape complete manga including all chapters and pages.
+        Scrape complete manga including all chapters and pages using parallel processing.
 
         Args:
             manga_url: URL of the manga page
+            max_workers: Maximum number of concurrent chapter scrapers
 
         Returns:
             Complete Manga object or None if failed
@@ -351,18 +353,41 @@ class VymangaScraper:
         if not manga:
             return None
 
-        # Then scrape all chapters
-        logger.info(f"Scraping {len(manga.chapters)} chapters...")
-        for i, chapter in enumerate(manga.chapters):
-            logger.info(f"Scraping chapter {i + 1}/{len(manga.chapters)}: {chapter.title}")
-            success = self.scrape_chapter_pages(chapter)
+        # Then scrape all chapters in parallel
+        total_chapters = len(manga.chapters)
+        logger.info(f"Scraping {total_chapters} chapters using {max_workers} parallel workers...")
 
-            if not success:
-                logger.warning(f"Failed to scrape pages for {chapter.title}")
+        successful_chapters = 0
+        failed_chapters = []
 
-            # Add small delay between chapters to be respectful
-            if i < len(manga.chapters) - 1:
-                time.sleep(1)
+        # Use ThreadPoolExecutor for parallel chapter scraping
+        with ThreadPoolExecutor(max_workers=max_workers) as executor:
+            # Submit all chapter scraping tasks
+            future_to_chapter = {
+                executor.submit(self.scrape_chapter_pages, chapter): chapter
+                for chapter in manga.chapters
+            }
+
+            # Process completed tasks as they finish
+            for future in as_completed(future_to_chapter):
+                chapter = future_to_chapter[future]
+                try:
+                    success = future.result()
+                    if success:
+                        successful_chapters += 1
+                        logger.info(f"✓ Completed: {chapter.title}")
+                    else:
+                        failed_chapters.append(chapter.title)
+                        logger.warning(f"✗ Failed: {chapter.title}")
+
+                except Exception as e:
+                    failed_chapters.append(chapter.title)
+                    logger.error(f"✗ Error scraping {chapter.title}: {e}")
+
+        # Log summary
+        logger.info(f"Chapter scraping completed: {successful_chapters}/{total_chapters} successful")
+        if failed_chapters:
+            logger.warning(f"Failed chapters: {', '.join(failed_chapters)}")
 
         logger.info(f"Completed scraping manga: {manga.title}")
         return manga

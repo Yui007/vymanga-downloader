@@ -101,13 +101,18 @@ class InteractiveCLI:
             print("❌ Invalid choice. Please select 1, 2, or 3.")
 
     def select_threading_options(self) -> tuple:
-        """Let user select threading options for downloads."""
-        print("\n⚡ Select download performance options:")
+        """Let user select threading options for downloads and scraping."""
+        print("\n⚡ Select performance options:")
+
+        # Scraping workers
+        print("\n🔍 Parallel chapter scraping:")
+        print("  How many chapters to scrape simultaneously")
+        scraping_workers = self.get_user_input("Scraping workers (1-5)", "3")
 
         # Chapter workers
         print("\n📚 Parallel chapter downloads:")
         print("  How many chapters to download simultaneously")
-        chapter_workers = self.get_user_input("Chapters at once (1-5)", "2")
+        chapter_workers = self.get_user_input("Download workers (1-5)", "2")
 
         # Image workers
         print("\n🖼️  Images per chapter:")
@@ -115,13 +120,15 @@ class InteractiveCLI:
         image_workers = self.get_user_input("Images at once (2-8)", "4")
 
         try:
+            scraping_workers = max(1, min(5, int(scraping_workers)))
             chapter_workers = max(1, min(5, int(chapter_workers)))
             image_workers = max(2, min(8, int(image_workers)))
         except ValueError:
+            scraping_workers = 3
             chapter_workers = 2
             image_workers = 4
 
-        return chapter_workers, image_workers
+        return scraping_workers, chapter_workers, image_workers
 
     def select_chapters(self, manga: Manga) -> List[float]:
         """
@@ -250,7 +257,7 @@ class InteractiveCLI:
         self.converter.quality = quality
 
         # Select threading options
-        chapter_workers, image_workers = self.select_threading_options()
+        scraping_workers, chapter_workers, image_workers = self.select_threading_options()
 
         # Set download path
         default_path = get_download_path()
@@ -266,7 +273,8 @@ class InteractiveCLI:
         print(f"  Path: {download_path}")
         print(f"  Chapters: {len(selected_chapters)}")
         print(f"  Separate chapters: {'Yes' if separate_chapters else 'No'}")
-        print(f"  Parallel chapters: {chapter_workers}")
+        print(f"  Parallel scraping: {scraping_workers}")
+        print(f"  Parallel downloads: {chapter_workers}")
         print(f"  Images per chapter: {image_workers}")
         if download_format in ['pdf', 'cbz']:
             print(f"  Delete images after conversion: {'Yes' if delete_images else 'No'}")
@@ -281,12 +289,16 @@ class InteractiveCLI:
             image_workers=image_workers
         )
 
-        # Scrape chapter pages
-        print("\n📄 Scraping chapter pages...")
-        for chapter in selected_chapters:
-            success = self.scraper.scrape_chapter_pages(chapter)
-            if not success:
-                print(f"⚠️  Warning: Failed to scrape pages for {chapter.title}")
+        # Scrape chapter pages with parallel processing
+        print(f"\n📄 Scraping chapter pages using {scraping_workers} parallel workers...")
+        temp_manga = self.scraper.scrape_manga_with_chapters(
+            temp_manga.url,
+            max_workers=scraping_workers
+        )
+
+        if not temp_manga:
+            print("❌ Failed to scrape chapter pages.")
+            return
 
         # Download manga
         success = self.downloader.download_manga(temp_manga, download_path)
@@ -336,6 +348,7 @@ Command Line Arguments:
   --format FORMAT        Output format: images, pdf, cbz (default: images)
   --quality QUALITY      Image quality: high, medium, low (default: medium)
   --output PATH          Download directory (default: ~/Downloads/Manga)
+  --scraping-workers NUM Chapters to scrape simultaneously (default: 3)
   --chapter-workers NUM  Chapters to download simultaneously (default: 2)
   --image-workers NUM    Images to download simultaneously per chapter (default: 4)
   --workers NUM          Deprecated: use --chapter-workers and --image-workers
@@ -346,7 +359,8 @@ Examples:
   python main.py --url https://vymanga.co/manga/example --range 1 10 --format pdf
   python main.py --url https://vymanga.co/manga/example --chapter 5 --format cbz
   python main.py --url https://vymanga.co/manga/example --format images --quality high
-  python main.py --url https://vymanga.co/manga/example --chapter-workers 3 --image-workers 6
+  python main.py --url https://vymanga.co/manga/example --scraping-workers 5 --chapter-workers 3 --image-workers 6
+  python main.py --url https://vymanga.co/manga/example --scraping-workers 5 --chapter-workers 3 --image-workers 6
         """
         print(help_text)
 
@@ -375,10 +389,12 @@ Examples:
     parser.add_argument('--output', help='Download directory')
     parser.add_argument('--workers', type=int, default=4,
                        help='Number of download threads (deprecated, use --chapter-workers and --image-workers)')
+    parser.add_argument('--scraping-workers', type=int, default=3,
+                        help='Number of chapters to scrape simultaneously (default: 3)')
     parser.add_argument('--chapter-workers', type=int, default=2,
-                       help='Number of chapters to download simultaneously (default: 2)')
+                        help='Number of chapters to download simultaneously (default: 2)')
     parser.add_argument('--image-workers', type=int, default=4,
-                       help='Number of images to download simultaneously per chapter (default: 4)')
+                        help='Number of images to download simultaneously per chapter (default: 4)')
     parser.add_argument('--verbose', '-v', action='store_true',
                        help='Enable verbose logging')
     parser.add_argument('--quiet', '-q', action='store_true',
@@ -473,11 +489,16 @@ def main_cli():
 
     print(f"⬇️  Downloading {len(chapters_to_download)} chapters...")
 
-    # Scrape chapter pages
-    for chapter in chapters_to_download:
-        success = scraper.scrape_chapter_pages(chapter)
-        if not success:
-            print(f"⚠️  Warning: Failed to scrape pages for {chapter.title}")
+    # Scrape chapter pages with parallel processing
+    print(f"📄 Scraping chapter pages using {args.scraping_workers} parallel workers...")
+    temp_manga = scraper.scrape_manga_with_chapters(
+        temp_manga.url,
+        max_workers=args.scraping_workers
+    )
+
+    if not temp_manga:
+        print("❌ Failed to scrape chapter pages.")
+        return
 
     # Download manga
     success = downloader.download_manga(temp_manga, download_path)
