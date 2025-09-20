@@ -226,12 +226,44 @@ def is_valid_image_url(url: str) -> bool:
         url: Image URL to check
 
     Returns:
-        True if URL has valid image extension
+        True if URL has valid image extension or appears to be an image URL
     """
+    if not url:
+        logger.debug("URL validation: empty URL")
+        return False
+
     valid_extensions = {'.jpg', '.jpeg', '.png', '.gif', '.webp', '.bmp'}
     url_lower = url.lower()
 
-    return any(url_lower.endswith(ext) for ext in valid_extensions)
+    logger.debug(f"Validating URL: {url}")
+
+    # Check for standard image extensions
+    if any(url_lower.endswith(ext) for ext in valid_extensions):
+        logger.debug("URL validation: has valid extension")
+        return True
+
+    # For URLs without extensions (like those from vymanga), check if they look like image URLs
+    # These typically contain image-related keywords or are from known image hosts
+    image_keywords = {'image', 'img', 'photo', 'picture', 'cdn', 'data'}
+    image_hosts = {'beercdn.info', 'imgur.com', 'i.imgur.com', 'cdn', 'blogspot.com', 'bp.blogspot.com'}
+
+    # Check if URL contains image-related keywords
+    if any(keyword in url_lower for keyword in image_keywords):
+        logger.debug("URL validation: contains image keywords")
+        return True
+
+    # Check if URL is from known image hosting domains
+    if any(host in url_lower for host in image_hosts):
+        logger.debug("URL validation: from known image host")
+        return True
+
+    # For vymanga specifically, allow URLs that don't have extensions but look like data URLs
+    if 'vymanga' in url_lower or 'data.beercdn' in url_lower:
+        logger.debug("URL validation: vymanga/data.beercdn URL")
+        return True
+
+    logger.debug("URL validation: rejected")
+    return False
 
 
 def create_progress_callback(description: str = "Progress"):

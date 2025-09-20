@@ -101,7 +101,7 @@ Supported qualities: high, medium, low
 
 def main():
     """Main application entry point."""
-    # Set up logging first
+    # Set up logging first - use DEBUG for troubleshooting
     setup_logging('INFO')
 
     # Create argument parser

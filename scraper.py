@@ -5,6 +5,7 @@ Handles fetching manga metadata, chapter lists, and page images.
 
 import requests
 import time
+import os
 from bs4 import BeautifulSoup
 from urllib.parse import urljoin, urlparse
 from typing import List, Optional, Dict, Any
@@ -12,6 +13,14 @@ import re
 
 from models import Manga, Chapter, Page
 from utils import logger, is_valid_image_url
+
+# Try to import playwright, fallback to requests if not available
+try:
+    from playwright.sync_api import sync_playwright
+    PLAYWRIGHT_AVAILABLE = True
+except ImportError:
+    PLAYWRIGHT_AVAILABLE = False
+    logger.warning("Playwright not available. Chapter image scraping may not work properly.")
 
 
 class VymangaScraper:
@@ -229,7 +238,7 @@ class VymangaScraper:
 
     def scrape_chapter_pages(self, chapter: Chapter) -> bool:
         """
-        Scrape all pages/images from a chapter.
+        Scrape all pages/images from a chapter using Playwright.
 
         Args:
             chapter: Chapter object to scrape pages for
@@ -238,81 +247,91 @@ class VymangaScraper:
             True if successful, False otherwise
         """
         logger.info(f"Scraping pages for {chapter.title}")
-        soup = self._make_request(chapter.url)
 
-        if not soup:
+        if not PLAYWRIGHT_AVAILABLE:
+            logger.error("Playwright not available. Cannot scrape chapter images.")
+            logger.info("Install playwright: pip install playwright")
+            logger.info("Then run: playwright install")
             return False
 
         try:
-            # Look for the vertical view toggle button and click it
-            if soup:
-                view_toggle = soup.find('a', {
-                    'class': 'view-control',
-                    'onclick': lambda x: x and 'setView(1)' in str(x)
-                })
+            # Import here to ensure it's available
+            from playwright.sync_api import sync_playwright
+            with sync_playwright() as p:
+                # Launch browser in headless mode
+                browser = p.chromium.launch(headless=True)
+                page = browser.new_page()
 
-                if view_toggle:
-                    logger.info("Switching to vertical view...")
-                    # Extract the onclick URL or try to simulate the click
-                    onclick = view_toggle.get('onclick', '')
-                    if 'setView(1)' in onclick:
-                        # Try to get the vertical view URL
-                        vertical_url = chapter.url
-                        if '?' in vertical_url:
-                            vertical_url += '&view=vertical'
-                        else:
-                            vertical_url += '?view=vertical'
+                # Go to chapter URL
+                logger.debug(f"Loading chapter URL: {chapter.url}")
+                page.goto(chapter.url, wait_until="domcontentloaded")
+                time.sleep(3)
 
-                        soup = self._make_request(vertical_url)
-                        if not soup:
-                            logger.warning("Failed to switch to vertical view, continuing with current view")
-
-            # Find all image containers
-            if not soup:
-                return False
-
-            page_containers = soup.find_all('div', class_='hview')
-
-            if not page_containers:
-                logger.warning("No page containers found")
-                return False
-
-            pages_found = 0
-            for i, container in enumerate(page_containers):
+                # Click "Change To Vertical View" button
                 try:
-                    # Find image within the container
-                    img = container.find('img')
-                    if not img:
-                        continue
-
-                    # Get image URL
-                    img_url = img.get('data-src') or img.get('src')
-                    if not img_url:
-                        continue
-
-                    # Validate image URL
-                    if not is_valid_image_url(img_url):
-                        continue
-
-                    # Handle relative URLs
-                    if img_url.startswith('/'):
-                        img_url = urljoin(self.base_url, img_url)
-                    elif not img_url.startswith('http'):
-                        img_url = urljoin(chapter.url, img_url)
-
-                    # Add page to chapter
-                    page = chapter.add_page(img_url, i + 1)
-                    pages_found += 1
-
+                    view_toggle = page.query_selector("a.view-control")
+                    if view_toggle:
+                        view_toggle.click()
+                        time.sleep(2)
+                        logger.debug("Switched to vertical view")
                 except Exception as e:
-                    logger.warning(f"Error parsing page {i + 1}: {e}")
-                    continue
+                    logger.debug(f"Could not click vertical view button: {e}")
 
-            logger.info(f"Found {pages_found} pages for {chapter.title}")
-            return pages_found > 0
+                # Grab all images inside #main_reader
+                image_elements = page.query_selector_all("#main_reader img")
+                logger.info(f"Found {len(image_elements)} images")
+
+                if not image_elements:
+                    logger.warning("No images found in chapter")
+                    browser.close()
+                    return False
+
+                pages_found = 0
+                for idx, img in enumerate(image_elements, start=1):
+                    try:
+                        # Get image URL from data-src or src attribute
+                        img_url = img.get_attribute("data-src") or img.get_attribute("src")
+
+                        logger.debug(f"Image {idx}: {img_url}")
+
+                        # Skip loading gifs and invalid URLs
+                        if not img_url:
+                            logger.debug(f"Skipping image {idx}: empty URL")
+                            continue
+
+                        if "loading.gif" in img_url:
+                            logger.debug(f"Skipping image {idx}: loading gif")
+                            continue
+
+                        # Validate image URL
+                        is_valid = is_valid_image_url(img_url)
+                        logger.debug(f"Image {idx} validation result: {is_valid}")
+
+                        if not is_valid:
+                            logger.debug(f"Skipping image {idx}: invalid image URL")
+                            continue
+
+                        # Handle relative URLs
+                        if img_url.startswith('/'):
+                            img_url = urljoin(self.base_url, img_url)
+                        elif not img_url.startswith('http'):
+                            img_url = urljoin(chapter.url, img_url)
+
+                        # Add page to chapter
+                        page_obj = chapter.add_page(img_url, idx)
+                        pages_found += 1
+                        logger.debug(f"Added page {idx}: {img_url}")
+
+                    except Exception as e:
+                        logger.warning(f"Error processing image {idx}: {e}")
+                        continue
+
+                browser.close()
+                logger.info(f"Successfully scraped {pages_found} pages for {chapter.title}")
+                return pages_found > 0
 
         except Exception as e:
-            logger.error(f"Error scraping chapter pages: {e}")
+            logger.error(f"Error scraping chapter pages with Playwright: {e}")
             return False
 
     def scrape_manga_with_chapters(self, manga_url: str) -> Optional[Manga]:
