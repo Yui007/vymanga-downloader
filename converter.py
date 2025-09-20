@@ -26,7 +26,7 @@ class MangaConverter:
         """
         self.quality = quality
         self.quality_settings = {
-            'high': {'jpeg_quality': 95, 'resize_factor': 1.0},
+            'high': {'jpeg_quality': 100, 'resize_factor': 1.0},
             'medium': {'jpeg_quality': 85, 'resize_factor': 0.8},
             'low': {'jpeg_quality': 75, 'resize_factor': 0.6}
         }
