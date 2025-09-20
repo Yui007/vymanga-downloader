@@ -150,7 +150,7 @@ class MangaDownloader:
 
         # Set up download path
         if download_path:
-            manga.download_path = download_path
+            manga.create_download_structure(download_path)
         elif not manga.download_path:
             manga.create_download_structure(os.path.join(os.getcwd(), "downloads"))
 
