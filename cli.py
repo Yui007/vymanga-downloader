@@ -58,8 +58,8 @@ class InteractiveCLI:
             print("\n\nOperation cancelled by user.")
             sys.exit(0)
 
-    def select_download_format(self) -> str:
-        """Let user select download format."""
+    def select_download_format(self) -> tuple:
+        """Let user select download format and options."""
         print("\n📁 Select download format:")
         print("1. Images only (JPG/PNG)")
         print("2. PDF format")
@@ -69,7 +69,21 @@ class InteractiveCLI:
             choice = self.get_user_input("Enter choice (1-3)", "1")
             if choice in ['1', '2', '3']:
                 formats = { '1': 'images', '2': 'pdf', '3': 'cbz' }
-                return formats[choice]
+                format_choice = formats[choice]
+
+                # Ask about separate chapters for PDF/CBZ
+                separate_chapters = True
+                if format_choice in ['pdf', 'cbz']:
+                    separate_choice = self.get_user_input("Create separate files per chapter? (Y/n)", "y")
+                    separate_chapters = not separate_choice.lower().startswith('n')
+
+                    # Ask about deleting images after conversion
+                    delete_choice = self.get_user_input("Delete original images after conversion? (y/N)", "n")
+                    delete_images = delete_choice.lower().startswith('y')
+                else:
+                    delete_images = False
+
+                return format_choice, separate_chapters, delete_images
             print("❌ Invalid choice. Please select 1, 2, or 3.")
 
     def select_quality(self) -> str:
@@ -85,6 +99,29 @@ class InteractiveCLI:
                 qualities = { '1': 'high', '2': 'medium', '3': 'low' }
                 return qualities[choice]
             print("❌ Invalid choice. Please select 1, 2, or 3.")
+
+    def select_threading_options(self) -> tuple:
+        """Let user select threading options for downloads."""
+        print("\n⚡ Select download performance options:")
+
+        # Chapter workers
+        print("\n📚 Parallel chapter downloads:")
+        print("  How many chapters to download simultaneously")
+        chapter_workers = self.get_user_input("Chapters at once (1-5)", "2")
+
+        # Image workers
+        print("\n🖼️  Images per chapter:")
+        print("  How many images to download simultaneously per chapter")
+        image_workers = self.get_user_input("Images at once (2-8)", "4")
+
+        try:
+            chapter_workers = max(1, min(5, int(chapter_workers)))
+            image_workers = max(2, min(8, int(image_workers)))
+        except ValueError:
+            chapter_workers = 2
+            image_workers = 4
+
+        return chapter_workers, image_workers
 
     def select_chapters(self, manga: Manga) -> List[float]:
         """
@@ -205,12 +242,15 @@ class InteractiveCLI:
             chapters=selected_chapters
         )
 
-        # Select download format
-        download_format = self.select_download_format()
+        # Select download format and options
+        download_format, separate_chapters, delete_images = self.select_download_format()
 
         # Select quality
         quality = self.select_quality()
         self.converter.quality = quality
+
+        # Select threading options
+        chapter_workers, image_workers = self.select_threading_options()
 
         # Set download path
         default_path = get_download_path()
@@ -225,10 +265,21 @@ class InteractiveCLI:
         print(f"  Quality: {quality}")
         print(f"  Path: {download_path}")
         print(f"  Chapters: {len(selected_chapters)}")
+        print(f"  Separate chapters: {'Yes' if separate_chapters else 'No'}")
+        print(f"  Parallel chapters: {chapter_workers}")
+        print(f"  Images per chapter: {image_workers}")
+        if download_format in ['pdf', 'cbz']:
+            print(f"  Delete images after conversion: {'Yes' if delete_images else 'No'}")
 
         if self.get_user_input("Start download? (Y/n)", "y").lower().startswith('n'):
             print("❌ Download cancelled.")
             return
+
+        # Initialize downloader with threading options
+        self.downloader = MangaDownloader(
+            chapter_workers=chapter_workers,
+            image_workers=image_workers
+        )
 
         # Scrape chapter pages
         print("\n📄 Scraping chapter pages...")
@@ -247,11 +298,20 @@ class InteractiveCLI:
         # Convert if needed
         if download_format in ['pdf', 'cbz']:
             print(f"\n🔄 Converting to {download_format.upper()} format...")
+            print(f"  Creating {'separate files per chapter' if separate_chapters else 'single combined file'}...")
 
             if download_format == 'pdf':
-                success = self.converter.convert_manga_to_pdf(temp_manga)
+                success = self.converter.convert_manga_to_pdf(
+                    temp_manga,
+                    separate_chapters=separate_chapters,
+                    delete_images=delete_images
+                )
             else:
-                success = self.converter.convert_manga_to_cbz(temp_manga)
+                success = self.converter.convert_manga_to_cbz(
+                    temp_manga,
+                    separate_chapters=separate_chapters,
+                    delete_images=delete_images
+                )
 
             if success:
                 print("✅ Conversion completed successfully!")
@@ -276,7 +336,9 @@ Command Line Arguments:
   --format FORMAT        Output format: images, pdf, cbz (default: images)
   --quality QUALITY      Image quality: high, medium, low (default: medium)
   --output PATH          Download directory (default: ~/Downloads/Manga)
-  --workers NUM          Number of download threads (default: 4)
+  --chapter-workers NUM  Chapters to download simultaneously (default: 2)
+  --image-workers NUM    Images to download simultaneously per chapter (default: 4)
+  --workers NUM          Deprecated: use --chapter-workers and --image-workers
   --verbose              Enable verbose logging
   --quiet                Minimal output
 
@@ -284,6 +346,7 @@ Examples:
   python main.py --url https://vymanga.co/manga/example --range 1 10 --format pdf
   python main.py --url https://vymanga.co/manga/example --chapter 5 --format cbz
   python main.py --url https://vymanga.co/manga/example --format images --quality high
+  python main.py --url https://vymanga.co/manga/example --chapter-workers 3 --image-workers 6
         """
         print(help_text)
 
@@ -311,7 +374,11 @@ Examples:
                        default='medium', help='Image quality (default: medium)')
     parser.add_argument('--output', help='Download directory')
     parser.add_argument('--workers', type=int, default=4,
-                       help='Number of download threads (default: 4)')
+                       help='Number of download threads (deprecated, use --chapter-workers and --image-workers)')
+    parser.add_argument('--chapter-workers', type=int, default=2,
+                       help='Number of chapters to download simultaneously (default: 2)')
+    parser.add_argument('--image-workers', type=int, default=4,
+                       help='Number of images to download simultaneously per chapter (default: 4)')
     parser.add_argument('--verbose', '-v', action='store_true',
                        help='Enable verbose logging')
     parser.add_argument('--quiet', '-q', action='store_true',
@@ -349,7 +416,10 @@ def main_cli():
 
     # Initialize components
     scraper = VymangaScraper()
-    downloader = MangaDownloader(max_workers=args.workers)
+    downloader = MangaDownloader(
+        chapter_workers=args.chapter_workers,
+        image_workers=args.image_workers
+    )
     converter = MangaConverter(quality=args.quality)
 
     # Set download path

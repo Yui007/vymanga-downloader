@@ -88,16 +88,21 @@ class DownloadWorker:
 class MangaDownloader:
     """Main downloader class for manga with concurrency support."""
 
-    def __init__(self, max_workers: int = 4, max_retries: int = 3):
+    def __init__(self, max_workers: int = 4, max_retries: int = 3,
+                 chapter_workers: Optional[int] = None, image_workers: Optional[int] = None):
         """
         Initialize the manga downloader.
 
         Args:
-            max_workers: Maximum number of concurrent download threads
+            max_workers: Maximum number of concurrent download threads (deprecated, use image_workers)
             max_retries: Maximum number of retry attempts per file
+            chapter_workers: Maximum number of concurrent chapter downloads
+            image_workers: Maximum number of concurrent image downloads per chapter
         """
         self.max_workers = max_workers
         self.max_retries = max_retries
+        self.chapter_workers = chapter_workers or 2  # Default: 2 concurrent chapters
+        self.image_workers = image_workers or 4      # Default: 4 concurrent images per chapter
         self.session = requests.Session()
         self.session.headers.update({
             'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36'
@@ -159,7 +164,7 @@ class MangaDownloader:
 
         # Download chapters concurrently
         success = True
-        with ThreadPoolExecutor(max_workers=self.max_workers) as executor:
+        with ThreadPoolExecutor(max_workers=self.chapter_workers) as executor:
             # Submit all chapters for download
             future_to_chapter = {
                 executor.submit(self._download_chapter, manga, chapter): chapter
@@ -219,7 +224,7 @@ class MangaDownloader:
         worker = DownloadWorker(self.session, self.max_retries)
         chapter_success = True
 
-        with ThreadPoolExecutor(max_workers=min(self.max_workers, len(chapter.pages))) as executor:
+        with ThreadPoolExecutor(max_workers=min(self.image_workers, len(chapter.pages))) as executor:
             # Submit all pages for download
             future_to_page = {}
             for page in chapter.pages:

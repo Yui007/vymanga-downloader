@@ -90,6 +90,9 @@ class Manga:
         """Create the folder structure for downloading this manga."""
         # Clean title for folder name
         folder_name = "".join(c for c in self.title if c.isalnum() or c in (' ', '-', '_')).rstrip()
+        if not folder_name:
+            folder_name = "untitled_manga"
+
         self.download_path = os.path.join(base_path, folder_name)
         os.makedirs(self.download_path, exist_ok=True)
         return self.download_path

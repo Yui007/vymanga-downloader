@@ -181,14 +181,17 @@ class MangaConverter:
             return False
 
     def convert_manga_to_pdf(self, manga: Manga, output_path: Optional[str] = None,
-                           chapter_range: Optional[Tuple[float, float]] = None) -> bool:
+                           chapter_range: Optional[Tuple[float, float]] = None,
+                           separate_chapters: bool = True, delete_images: bool = False) -> bool:
         """
-        Convert entire manga or chapter range to a single PDF.
+        Convert manga chapters to PDF format.
 
         Args:
             manga: Manga object with downloaded chapters
             output_path: Output path for the PDF (optional)
             chapter_range: Tuple of (start_chapter, end_chapter) to convert (optional)
+            separate_chapters: If True, create separate PDF for each chapter
+            delete_images: If True, delete original images after conversion
 
         Returns:
             True if conversion successful, False otherwise
@@ -206,101 +209,121 @@ class MangaConverter:
             logger.warning("No chapters found to convert")
             return False
 
-        # Set output path
-        if not output_path:
-            range_str = f"_Chapters_{chapter_range[0]}-{chapter_range[1]}" if chapter_range else ""
-            output_path = os.path.join(manga.download_path, f"{manga.title}{range_str}.pdf")
-
         try:
-            logger.info(f"Converting manga to PDF: {output_path}")
+            if separate_chapters:
+                # Create separate PDF for each chapter
+                success_count = 0
+                for chapter in chapters_to_convert:
+                    if self.convert_chapter_to_pdf(chapter):
+                        success_count += 1
+                        if delete_images:
+                            self._delete_chapter_images(chapter)
 
-            # Collect all images from all chapters
-            all_images = []
-            for chapter in chapters_to_convert:
-                if not chapter.download_path or not os.path.exists(chapter.download_path):
-                    logger.warning(f"Chapter path not found: {chapter.title}")
-                    continue
+                logger.info(f"Converted {success_count}/{len(chapters_to_convert)} chapters to separate PDFs")
+                return success_count > 0
+            else:
+                # Combine all chapters into single PDF (original behavior)
+                if not output_path:
+                    range_str = f"_Chapters_{chapter_range[0]}-{chapter_range[1]}" if chapter_range else ""
+                    output_path = os.path.join(manga.download_path, f"{manga.title}{range_str}.pdf")
 
-                # Find image files in chapter directory
-                image_extensions = {'.jpg', '.jpeg', '.png', '.webp', '.bmp'}
-                chapter_images = []
+                logger.info(f"Converting manga to single PDF: {output_path}")
 
-                for file_path in sorted(Path(chapter.download_path).iterdir()):
-                    if file_path.suffix.lower() in image_extensions and file_path.is_file():
-                        chapter_images.append(str(file_path))
+                # Collect all images from all chapters
+                all_images = []
+                for chapter in chapters_to_convert:
+                    if not chapter.download_path or not os.path.exists(chapter.download_path):
+                        logger.warning(f"Chapter path not found: {chapter.title}")
+                        continue
 
-                if chapter_images:
-                    all_images.extend(chapter_images)
-                    logger.debug(f"Added {len(chapter_images)} images from {chapter.title}")
+                    # Find image files in chapter directory
+                    image_extensions = {'.jpg', '.jpeg', '.png', '.webp', '.bmp'}
+                    chapter_images = []
 
-            if not all_images:
-                logger.error("No images found for PDF conversion")
-                return False
+                    for file_path in sorted(Path(chapter.download_path).iterdir()):
+                        if file_path.suffix.lower() in image_extensions and file_path.is_file():
+                            chapter_images.append(str(file_path))
 
-            logger.info(f"Converting {len(all_images)} images from {len(chapters_to_convert)} chapters")
+                    if chapter_images:
+                        all_images.extend(chapter_images)
+                        logger.debug(f"Added {len(chapter_images)} images from {chapter.title}")
 
-            # Open first image to get dimensions
-            first_image = Image.open(all_images[0])
-            width, height = first_image.size
+                if not all_images:
+                    logger.error("No images found for PDF conversion")
+                    return False
 
-            # Create PDF images list
-            pdf_images = []
-            for image_path in all_images:
-                try:
-                    img = Image.open(image_path)
+                logger.info(f"Converting {len(all_images)} images from {len(chapters_to_convert)} chapters")
 
-                    # Convert to RGB if necessary
-                    if img.mode != 'RGB':
-                        img = img.convert('RGB')
+                # Open first image to get dimensions
+                first_image = Image.open(all_images[0])
+                width, height = first_image.size
 
-                    # Resize if needed
-                    settings = self.quality_settings[self.quality]
-                    if settings['resize_factor'] != 1.0:
-                        new_width = int(width * settings['resize_factor'])
-                        new_height = int(height * settings['resize_factor'])
-                        img = img.resize((new_width, new_height), Image.Resampling.LANCZOS)
+                # Create PDF images list
+                pdf_images = []
+                for image_path in all_images:
+                    try:
+                        img = Image.open(image_path)
 
-                    pdf_images.append(img)
+                        # Convert to RGB if necessary
+                        if img.mode != 'RGB':
+                            img = img.convert('RGB')
 
-                except Exception as e:
-                    logger.warning(f"Error processing image {image_path}: {e}")
-                    continue
+                        # Resize if needed
+                        settings = self.quality_settings[self.quality]
+                        if settings['resize_factor'] != 1.0:
+                            new_width = int(width * settings['resize_factor'])
+                            new_height = int(height * settings['resize_factor'])
+                            img = img.resize((new_width, new_height), Image.Resampling.LANCZOS)
 
-            if not pdf_images:
-                logger.error("No valid images found for PDF conversion")
-                return False
+                        pdf_images.append(img)
 
-            # Save as PDF
-            settings = self.quality_settings[self.quality]
-            pdf_images[0].save(
-                output_path,
-                save_all=True,
-                append_images=pdf_images[1:],
-                quality=settings['jpeg_quality']
-            )
+                    except Exception as e:
+                        logger.warning(f"Error processing image {image_path}: {e}")
+                        continue
 
-            # Close all images
-            for img in pdf_images:
-                img.close()
+                if not pdf_images:
+                    logger.error("No valid images found for PDF conversion")
+                    return False
 
-            file_size = os.path.getsize(output_path)
-            logger.info(f"Manga PDF created successfully: {output_path} ({format_bytes(file_size)})")
+                # Save as PDF
+                settings = self.quality_settings[self.quality]
+                pdf_images[0].save(
+                    output_path,
+                    save_all=True,
+                    append_images=pdf_images[1:],
+                    quality=settings['jpeg_quality']
+                )
 
-            return True
+                # Close all images
+                for img in pdf_images:
+                    img.close()
+
+                file_size = os.path.getsize(output_path)
+                logger.info(f"Manga PDF created successfully: {output_path} ({format_bytes(file_size)})")
+
+                # Delete images if requested
+                if delete_images:
+                    for chapter in chapters_to_convert:
+                        self._delete_chapter_images(chapter)
+
+                return True
 
         except Exception as e:
             logger.error(f"Error converting manga to PDF: {e}")
             return False
 
     def convert_manga_to_cbz(self, manga: Manga, output_path: Optional[str] = None,
-                           chapter_range: Optional[Tuple[float, float]] = None) -> bool:
+                           chapter_range: Optional[Tuple[float, float]] = None,
+                           separate_chapters: bool = True, delete_images: bool = False) -> bool:
         """
-        Convert entire manga or chapter range to CBZ format.
+        Convert manga chapters to CBZ format.
 
         Args:
             manga: Manga object with downloaded chapters
             output_path: Output path for the CBZ (optional)
             chapter_range: Tuple of (start_chapter, end_chapter) to convert (optional)
+            separate_chapters: If True, create separate CBZ for each chapter
+            delete_images: If True, delete original images after conversion
 
         Returns:
             True if conversion successful, False otherwise
@@ -318,51 +341,68 @@ class MangaConverter:
             logger.warning("No chapters found to convert")
             return False
 
-        # Set output path
-        if not output_path:
-            range_str = f"_Chapters_{chapter_range[0]}-{chapter_range[1]}" if chapter_range else ""
-            output_path = os.path.join(manga.download_path, f"{manga.title}{range_str}.cbz")
-
         try:
-            logger.info(f"Converting manga to CBZ: {output_path}")
+            if separate_chapters:
+                # Create separate CBZ for each chapter
+                success_count = 0
+                for chapter in chapters_to_convert:
+                    if self.convert_chapter_to_cbz(chapter):
+                        success_count += 1
+                        if delete_images:
+                            self._delete_chapter_images(chapter)
 
-            # Collect all images from all chapters
-            all_images = []
-            for chapter in chapters_to_convert:
-                if not chapter.download_path or not os.path.exists(chapter.download_path):
-                    logger.warning(f"Chapter path not found: {chapter.title}")
-                    continue
+                logger.info(f"Converted {success_count}/{len(chapters_to_convert)} chapters to separate CBZs")
+                return success_count > 0
+            else:
+                # Combine all chapters into single CBZ (original behavior)
+                if not output_path:
+                    range_str = f"_Chapters_{chapter_range[0]}-{chapter_range[1]}" if chapter_range else ""
+                    output_path = os.path.join(manga.download_path, f"{manga.title}{range_str}.cbz")
 
-                # Find image files in chapter directory
-                image_extensions = {'.jpg', '.jpeg', '.png', '.webp', '.bmp'}
+                logger.info(f"Converting manga to single CBZ: {output_path}")
 
-                for file_path in sorted(Path(chapter.download_path).iterdir()):
-                    if file_path.suffix.lower() in image_extensions and file_path.is_file():
-                        all_images.append(str(file_path))
-
-            if not all_images:
-                logger.error("No images found for CBZ conversion")
-                return False
-
-            logger.info(f"Converting {len(all_images)} images from {len(chapters_to_convert)} chapters")
-
-            # Create CBZ (ZIP) file
-            with zipfile.ZipFile(output_path, 'w', zipfile.ZIP_DEFLATED) as cbz_file:
-                for image_path in all_images:
-                    try:
-                        # Add file to archive with just the filename (no path)
-                        filename = os.path.basename(image_path)
-                        cbz_file.write(image_path, filename)
-                        logger.debug(f"Added to CBZ: {filename}")
-
-                    except Exception as e:
-                        logger.warning(f"Error adding {image_path} to CBZ: {e}")
+                # Collect all images from all chapters
+                all_images = []
+                for chapter in chapters_to_convert:
+                    if not chapter.download_path or not os.path.exists(chapter.download_path):
+                        logger.warning(f"Chapter path not found: {chapter.title}")
                         continue
 
-            file_size = os.path.getsize(output_path)
-            logger.info(f"Manga CBZ created successfully: {output_path} ({format_bytes(file_size)})")
+                    # Find image files in chapter directory
+                    image_extensions = {'.jpg', '.jpeg', '.png', '.webp', '.bmp'}
 
-            return True
+                    for file_path in sorted(Path(chapter.download_path).iterdir()):
+                        if file_path.suffix.lower() in image_extensions and file_path.is_file():
+                            all_images.append(str(file_path))
+
+                if not all_images:
+                    logger.error("No images found for CBZ conversion")
+                    return False
+
+                logger.info(f"Converting {len(all_images)} images from {len(chapters_to_convert)} chapters")
+
+                # Create CBZ (ZIP) file
+                with zipfile.ZipFile(output_path, 'w', zipfile.ZIP_DEFLATED) as cbz_file:
+                    for image_path in all_images:
+                        try:
+                            # Add file to archive with just the filename (no path)
+                            filename = os.path.basename(image_path)
+                            cbz_file.write(image_path, filename)
+                            logger.debug(f"Added to CBZ: {filename}")
+
+                        except Exception as e:
+                            logger.warning(f"Error adding {image_path} to CBZ: {e}")
+                            continue
+
+                file_size = os.path.getsize(output_path)
+                logger.info(f"Manga CBZ created successfully: {output_path} ({format_bytes(file_size)})")
+
+                # Delete images if requested
+                if delete_images:
+                    for chapter in chapters_to_convert:
+                        self._delete_chapter_images(chapter)
+
+                return True
 
         except Exception as e:
             logger.error(f"Error converting manga to CBZ: {e}")
@@ -439,4 +479,38 @@ class MangaConverter:
 
         except Exception as e:
             logger.error(f"Error optimizing images: {e}")
+            return False
+
+    def _delete_chapter_images(self, chapter: Chapter) -> bool:
+        """
+        Delete all images in a chapter directory.
+
+        Args:
+            chapter: Chapter object with downloaded images
+
+        Returns:
+            True if deletion successful, False otherwise
+        """
+        if not chapter.download_path or not os.path.exists(chapter.download_path):
+            logger.warning(f"Chapter path not found: {chapter.download_path}")
+            return False
+
+        try:
+            image_extensions = {'.jpg', '.jpeg', '.png', '.webp', '.bmp'}
+            deleted_count = 0
+
+            for file_path in Path(chapter.download_path).iterdir():
+                if file_path.suffix.lower() in image_extensions and file_path.is_file():
+                    try:
+                        file_path.unlink()
+                        deleted_count += 1
+                        logger.debug(f"Deleted image: {file_path.name}")
+                    except Exception as e:
+                        logger.warning(f"Failed to delete {file_path}: {e}")
+
+            logger.info(f"Deleted {deleted_count} images from {chapter.title}")
+            return True
+
+        except Exception as e:
+            logger.error(f"Error deleting chapter images: {e}")
             return False
