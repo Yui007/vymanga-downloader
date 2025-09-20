@@ -291,12 +291,12 @@ class InteractiveCLI:
 
         # Scrape chapter pages with parallel processing
         print(f"\n📄 Scraping chapter pages using {scraping_workers} parallel workers...")
-        temp_manga = self.scraper.scrape_manga_with_chapters(
-            temp_manga.url,
+        success = self.scraper.scrape_selected_chapters(
+            temp_manga.chapters,
             max_workers=scraping_workers
         )
 
-        if not temp_manga:
+        if not success:
             print("❌ Failed to scrape chapter pages.")
             return
 
@@ -491,12 +491,12 @@ def main_cli():
 
     # Scrape chapter pages with parallel processing
     print(f"📄 Scraping chapter pages using {args.scraping_workers} parallel workers...")
-    temp_manga = scraper.scrape_manga_with_chapters(
-        temp_manga.url,
+    success = scraper.scrape_selected_chapters(
+        temp_manga.chapters,
         max_workers=args.scraping_workers
     )
 
-    if not temp_manga:
+    if not success:
         print("❌ Failed to scrape chapter pages.")
         return
 

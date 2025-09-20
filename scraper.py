@@ -392,6 +392,57 @@ class VymangaScraper:
         logger.info(f"Completed scraping manga: {manga.title}")
         return manga
 
+    def scrape_selected_chapters(self, chapters: List[Chapter], max_workers: int = 3) -> bool:
+        """
+        Scrape pages for selected chapters only using parallel processing.
+
+        Args:
+            chapters: List of Chapter objects to scrape pages for
+            max_workers: Maximum number of concurrent chapter scrapers
+
+        Returns:
+            True if all chapters were scraped successfully, False otherwise
+        """
+        if not chapters:
+            logger.warning("No chapters provided for scraping")
+            return False
+
+        logger.info(f"Scraping {len(chapters)} selected chapters using {max_workers} parallel workers...")
+
+        successful_chapters = 0
+        failed_chapters = []
+
+        # Use ThreadPoolExecutor for parallel chapter scraping
+        with ThreadPoolExecutor(max_workers=max_workers) as executor:
+            # Submit all chapter scraping tasks
+            future_to_chapter = {
+                executor.submit(self.scrape_chapter_pages, chapter): chapter
+                for chapter in chapters
+            }
+
+            # Process completed tasks as they finish
+            for future in as_completed(future_to_chapter):
+                chapter = future_to_chapter[future]
+                try:
+                    success = future.result()
+                    if success:
+                        successful_chapters += 1
+                        logger.info(f"✓ Completed: {chapter.title}")
+                    else:
+                        failed_chapters.append(chapter.title)
+                        logger.warning(f"✗ Failed: {chapter.title}")
+
+                except Exception as e:
+                    failed_chapters.append(chapter.title)
+                    logger.error(f"✗ Error scraping {chapter.title}: {e}")
+
+        # Log summary
+        logger.info(f"Chapter scraping completed: {successful_chapters}/{len(chapters)} successful")
+        if failed_chapters:
+            logger.warning(f"Failed chapters: {', '.join(failed_chapters)}")
+
+        return len(failed_chapters) == 0
+
     def search_manga(self, query: str, limit: int = 10) -> List[Dict[str, Any]]:
         """
         Search for manga by title.
