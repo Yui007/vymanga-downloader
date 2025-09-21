@@ -131,11 +131,9 @@ def main():
     if not check_dependencies():
         return 1
 
-    # Handle GUI mode (placeholder for future implementation)
+    # Handle GUI mode
     if args.gui:
-        print("🎨 GUI mode requested, but not yet implemented.")
-        print("💡 Use CLI mode for now: python main.py")
-        return 0
+        return run_gui_mode()
 
     # Handle quick download mode
     if args.url:
@@ -274,6 +272,22 @@ def run_quick_download(args):
         return 0
     except Exception as e:
         print(f"❌ Error: {e}")
+        return 1
+
+
+def run_gui_mode():
+    """Run the GUI mode."""
+    try:
+        # Import and run GUI
+        from gui import main_gui
+        return main_gui()
+
+    except ImportError as e:
+        print(f"❌ Error: Failed to import GUI module: {e}")
+        print("💡 Make sure PyQt6 is installed: pip install PyQt6")
+        return 1
+    except Exception as e:
+        print(f"❌ Error: Failed to start GUI: {e}")
         return 1
 
 
