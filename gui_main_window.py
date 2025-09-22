@@ -291,7 +291,7 @@ class MainWindow(QMainWindow):
             'scraping_workers': 3,
             'chapter_workers': 2,
             'image_workers': 4,
-            'quality': 'medium',
+            'quality': 'high',  # Default to high quality for best results
             'format': 'images',
             'separate_chapters': True,
             'delete_images': False,
@@ -538,10 +538,11 @@ class MainWindow(QMainWindow):
         if not self.manga.download_path:
             self.manga.create_download_structure(download_path)
 
-        # Create conversion worker
+        # Create conversion worker with quality setting
         self.conversion_worker = ConversionWorker(
             self.manga,
             output_format,
+            self.current_settings.get('quality', 'high'),  # Default to high quality
             self.current_settings.get('separate_chapters', True),
             self.current_settings.get('delete_images', False)
         )

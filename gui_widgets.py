@@ -511,7 +511,7 @@ class SettingsWidget(QWidget):
         # Image quality
         self.quality_combo = QComboBox()
         self.quality_combo.addItems(["High", "Medium", "Low"])
-        self.quality_combo.setCurrentText("Medium")
+        self.quality_combo.setCurrentText("High")  # Default to high quality
         apply_widget_style(self.quality_combo, "input")
         quality_layout.addRow("Image Quality:", self.quality_combo)
 

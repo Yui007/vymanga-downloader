@@ -165,10 +165,11 @@ class DownloadWorker(QThread):
 class ConversionWorker(QThread):
     """Worker thread for format conversion operations."""
 
-    def __init__(self, manga: Manga, output_format: str, separate_chapters: bool = True, delete_images: bool = False):
+    def __init__(self, manga: Manga, output_format: str, quality: str = "high", separate_chapters: bool = True, delete_images: bool = False):
         super().__init__()
         self.manga = manga
         self.output_format = output_format
+        self.quality = quality
         self.separate_chapters = separate_chapters
         self.delete_images = delete_images
         self.signals = WorkerSignals()
@@ -179,12 +180,8 @@ class ConversionWorker(QThread):
             format_name = self.output_format.upper()
             self.signals.conversion_started.emit(f"Converting to {format_name} format...")
 
-            # Create converter instance (same as CLI approach)
-            converter = MangaConverter()
-
-            # Set quality from settings (same as CLI approach)
-            quality = self.manga.metadata.get('quality', 'medium') if hasattr(self.manga, 'metadata') else 'medium'
-            converter.quality = quality
+            # Create converter instance with quality setting
+            converter = MangaConverter(quality=self.quality)
 
             # Filter to only chapters that have download paths (were actually downloaded)
             downloadable_chapters = [ch for ch in self.manga.chapters if ch.download_path]

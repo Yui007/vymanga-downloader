@@ -78,7 +78,7 @@ Supported qualities: high, medium, low
     parser.add_argument('--format', choices=['images', 'pdf', 'cbz'],
                        default='images', help='Output format')
     parser.add_argument('--quality', choices=['high', 'medium', 'low'],
-                       default='medium', help='Image quality')
+                        default='high', help='Image quality')
     parser.add_argument('--output', help='Download directory')
 
     # Configuration

@@ -385,7 +385,7 @@ Examples:
     parser.add_argument('--format', choices=['images', 'pdf', 'cbz'],
                        default='images', help='Output format (default: images)')
     parser.add_argument('--quality', choices=['high', 'medium', 'low'],
-                       default='medium', help='Image quality (default: medium)')
+                        default='high', help='Image quality (default: high)')
     parser.add_argument('--output', help='Download directory')
     parser.add_argument('--workers', type=int, default=4,
                        help='Number of download threads (deprecated, use --chapter-workers and --image-workers)')
