@@ -353,7 +353,7 @@ class MainWindow(QMainWindow):
             QMessageBox.warning(self, "No Chapters", "Please select at least one chapter to download.")
             return
 
-        # Create filtered manga
+        # Create filtered manga with download path
         download_manga = Manga(
             title=self.manga.title,
             url=self.manga.url,
@@ -364,6 +364,10 @@ class MainWindow(QMainWindow):
             cover_url=self.manga.cover_url,
             chapters=selected_chapter_objects
         )
+
+        # Set download path
+        download_path = self.current_settings.get('download_path', get_download_path())
+        download_manga.create_download_structure(download_path)
 
         # Get download path
         download_path = self.current_settings.get('download_path', get_download_path())
@@ -389,6 +393,12 @@ class MainWindow(QMainWindow):
     def on_download_started(self, message: str):
         """Handle download started."""
         self.status_bar.showMessage(message)
+
+        # Add download item to progress widget
+        if self.manga:
+            total_chapters = len(self.selected_chapters) if self.selected_chapters else len(self.manga.chapters)
+            item_id = self.manga.title
+            self.download_progress_widget.add_download_item(item_id, self.manga.title, total_chapters)
 
     def on_download_progress(self, item_id: str, current: int, total: int, status: str):
         """Handle download progress."""
