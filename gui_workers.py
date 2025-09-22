@@ -179,8 +179,12 @@ class ConversionWorker(QThread):
             format_name = self.output_format.upper()
             self.signals.conversion_started.emit(f"Converting to {format_name} format...")
 
-            # Create converter instance
+            # Create converter instance (same as CLI approach)
             converter = MangaConverter()
+
+            # Set quality from settings (same as CLI approach)
+            quality = self.manga.metadata.get('quality', 'medium') if hasattr(self.manga, 'metadata') else 'medium'
+            converter.quality = quality
 
             # Filter to only chapters that have download paths (were actually downloaded)
             downloadable_chapters = [ch for ch in self.manga.chapters if ch.download_path]
@@ -201,8 +205,13 @@ class ConversionWorker(QThread):
                 chapters=downloadable_chapters
             )
 
+            # Set download path on temp_manga (same as CLI approach)
+            if self.manga.download_path:
+                temp_manga.create_download_structure(self.manga.download_path)
+
             success = False
 
+            # Use the same conversion approach as CLI
             if self.output_format == 'pdf':
                 success = converter.convert_manga_to_pdf(
                     temp_manga,
