@@ -112,19 +112,38 @@ class DownloadWorker(QThread):
                 self.signals.download_error.emit(self.manga.title, "Failed to scrape chapter pages")
                 return
 
-            # Create downloader instance
+            # Create downloader instance with progress callback
             downloader = MangaDownloader(
                 chapter_workers=self.chapter_workers,
                 image_workers=self.image_workers
             )
 
+            # Add progress callback to emit signals
+            def progress_callback(progress):
+                """Progress callback to emit GUI signals."""
+                QApplication.processEvents()  # Keep UI responsive
+
+                # Calculate overall progress
+                total_files = progress.total_files
+                downloaded_files = progress.downloaded_files
+                current_chapter = progress.current_chapter or ""
+                current_file = progress.current_file or ""
+
+                # Emit progress signal
+                status = progress.status
+                if status == "downloading":
+                    status_msg = f"Downloading: {current_chapter} - {current_file}"
+                else:
+                    status_msg = status
+
+                self.signals.download_progress.emit(
+                    self.manga.title, downloaded_files, total_files, status_msg
+                )
+
+            downloader.add_progress_callback(progress_callback)
+
             # Download manga
             QApplication.processEvents()
-            self.signals.download_progress.emit(
-                self.manga.title, 0, len(self.manga.chapters),
-                "Downloading chapters..."
-            )
-
             success = downloader.download_manga(self.manga, self.download_path)
 
             if success:

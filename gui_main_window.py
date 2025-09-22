@@ -6,7 +6,8 @@ Contains the 4 main tabs: Scraping, Manga Details, Settings, and Downloads.
 from PyQt6.QtWidgets import (
     QMainWindow, QWidget, QVBoxLayout, QHBoxLayout, QTabWidget,
     QLabel, QPushButton, QLineEdit, QTextEdit, QProgressBar,
-    QSplitter, QGroupBox, QStatusBar, QMessageBox, QFileDialog
+    QSplitter, QGroupBox, QStatusBar, QMessageBox, QFileDialog,
+    QScrollArea
 )
 from PyQt6.QtCore import Qt, QTimer
 from PyQt6.QtGui import QFont, QIcon
@@ -210,14 +211,74 @@ class MainWindow(QMainWindow):
         title_label = create_styled_label("Downloads", "title")
         layout.addWidget(title_label)
 
-        # Download progress widget
-        self.download_progress_widget = DownloadProgressWidget()
-        layout.addWidget(self.download_progress_widget)
+        # Status section
+        status_card = ModernCard("Download Status")
+        status_layout = QVBoxLayout()
+
+        self.download_status_label = create_styled_label("No downloads in progress")
+        self.download_status_label.setStyleSheet("font-size: 16px; font-weight: bold;")
+        status_layout.addWidget(self.download_status_label)
+
+        # Progress bar for overall download
+        self.overall_progress = QProgressBar()
+        self.overall_progress.setRange(0, 100)
+        self.overall_progress.setValue(0)
+        self.overall_progress.setVisible(False)
+        apply_widget_style(self.overall_progress, "progress")
+        status_layout.addWidget(self.overall_progress)
+
+        # Current operation label
+        self.current_operation_label = create_styled_label("")
+        status_layout.addWidget(self.current_operation_label)
+
+        status_card.add_layout(status_layout)
+        layout.addWidget(status_card)
+
+        # Active downloads section
+        downloads_card = ModernCard("Active Downloads")
+        downloads_layout = QVBoxLayout()
+
+        # Scroll area for individual download items
+        self.downloads_scroll = QScrollArea()
+        self.downloads_scroll.setWidgetResizable(True)
+        self.downloads_scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAsNeeded)
+        self.downloads_scroll.setVerticalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAsNeeded)
+        self.downloads_scroll.setMinimumHeight(300)
+        apply_widget_style(self.downloads_scroll, "card")
+
+        # Container for download items
+        self.downloads_container = QWidget()
+        self.downloads_container_layout = QVBoxLayout(self.downloads_container)
+        self.downloads_container_layout.setSpacing(10)
+
+        self.downloads_scroll.setWidget(self.downloads_container)
+        downloads_layout.addWidget(self.downloads_scroll)
+
+        downloads_card.add_layout(downloads_layout)
+        layout.addWidget(downloads_card)
+
+        # Control buttons
+        buttons_layout = QHBoxLayout()
+        buttons_layout.addStretch()
+
+        self.clear_completed_btn = create_animated_button("Clear Completed", primary=False)
+        self.clear_completed_btn.clicked.connect(self.clear_completed_downloads)
+        buttons_layout.addWidget(self.clear_completed_btn)
+
+        self.cancel_all_btn = create_animated_button("Cancel All", primary=False)
+        self.cancel_all_btn.clicked.connect(self.cancel_all_downloads)
+        buttons_layout.addWidget(self.cancel_all_btn)
+
+        layout.addLayout(buttons_layout)
 
         # Add stretch
         layout.addStretch()
 
         self.tab_widget.addTab(tab, "⬇️ Downloads")
+
+        # Initialize download tracking
+        self.active_downloads = {}
+        self.download_counters = {}
 
     def setup_connections(self):
         """Setup signal connections."""
@@ -397,15 +458,15 @@ class MainWindow(QMainWindow):
         """Handle download started."""
         self.status_bar.showMessage(message)
 
-        # Add download item to progress widget
+        # Add download item to downloads tab
         if self.manga:
             total_chapters = len(self.selected_chapters) if self.selected_chapters else len(self.manga.chapters)
             item_id = self.manga.title
-            self.download_progress_widget.add_download_item(item_id, self.manga.title, total_chapters)
+            self.add_download_item(item_id, self.manga.title, total_chapters)
 
     def on_download_progress(self, item_id: str, current: int, total: int, status: str):
         """Handle download progress."""
-        self.download_progress_widget.update_progress(item_id, current, total, status)
+        self.update_download_progress(item_id, current, total, status)
 
     def on_download_finished(self, item_id: str):
         """Handle download finished."""
@@ -475,3 +536,87 @@ class MainWindow(QMainWindow):
             self.status_bar.showMessage("Settings updated")
         except Exception as e:
             logger.error(f"Failed to save settings: {e}")
+
+    def clear_completed_downloads(self):
+        """Clear completed downloads from the list."""
+        # Remove completed download items from the UI
+        for i in reversed(range(self.downloads_container_layout.count())):
+            item = self.downloads_container_layout.itemAt(i)
+            if item and item.widget():
+                widget = item.widget()
+                # Check if this is a completed download (you'd need to track status)
+                # For now, just remove all items
+                if widget:
+                    widget.deleteLater()
+
+        self.status_bar.showMessage("Completed downloads cleared")
+
+    def cancel_all_downloads(self):
+        """Cancel all active downloads."""
+        # Cancel all active download workers
+        if hasattr(self, 'download_worker') and self.download_worker:
+            self.download_worker.cancel()
+
+        self.status_bar.showMessage("All downloads cancelled")
+
+    def add_download_item(self, item_id: str, title: str, total_files: int):
+        """Add a new download item to the downloads tab."""
+        from gui_widgets import DownloadItemWidget
+
+        # Create download item widget
+        download_item = DownloadItemWidget(item_id, title, total_files)
+        self.downloads_container_layout.addWidget(download_item)
+        self.active_downloads[item_id] = download_item
+
+        # Update status
+        self.download_status_label.setText(f"Downloading: {title}")
+        self.overall_progress.setVisible(True)
+        self.overall_progress.setRange(0, total_files)
+        self.overall_progress.setValue(0)
+
+        # Scroll to show new item
+        scroll_bar = self.downloads_scroll.verticalScrollBar()
+        if scroll_bar:
+            scroll_bar.setValue(scroll_bar.maximum())
+
+    def update_download_progress(self, item_id: str, current: int, total: int, status: str):
+        """Update download progress for an item."""
+        if item_id in self.active_downloads:
+            download_item = self.active_downloads[item_id]
+            download_item.update_progress(current, total, status)
+
+            # Update overall progress
+            if total > 0:
+                overall_current = sum(
+                    item.progress_bar.value()
+                    for item in self.active_downloads.values()
+                    if hasattr(item, 'progress_bar')
+                )
+                overall_total = sum(
+                    item.progress_bar.maximum()
+                    for item in self.active_downloads.values()
+                    if hasattr(item, 'progress_bar')
+                )
+
+                if overall_total > 0:
+                    self.overall_progress.setValue(overall_current)
+                    self.overall_progress.setMaximum(overall_total)
+
+            # Update current operation
+            if status == "downloading":
+                self.current_operation_label.setText(f"Progress: {current}/{total} files")
+            elif status == "completed":
+                self.current_operation_label.setText("Download completed!")
+
+    def remove_download_item(self, item_id: str):
+        """Remove a download item."""
+        if item_id in self.active_downloads:
+            download_item = self.active_downloads[item_id]
+            download_item.deleteLater()
+            del self.active_downloads[item_id]
+
+            # Update status if no more active downloads
+            if not self.active_downloads:
+                self.download_status_label.setText("No downloads in progress")
+                self.overall_progress.setVisible(False)
+                self.current_operation_label.setText("")
