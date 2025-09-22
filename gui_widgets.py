@@ -560,6 +560,7 @@ class SettingsWidget(QWidget):
 
         browse_btn = create_animated_button("Browse")
         browse_btn.setFixedWidth(80)
+        browse_btn.clicked.connect(self.browse_download_path)
         path_layout.addWidget(browse_btn)
 
         path_group.add_layout(path_layout)
@@ -623,6 +624,24 @@ class SettingsWidget(QWidget):
         """Get current settings."""
         self.collect_settings()
         return self.settings.copy()
+
+    def browse_download_path(self):
+        """Open file dialog to select download path."""
+        from PyQt6.QtWidgets import QFileDialog
+
+        current_path = self.download_path_edit.text()
+        if not current_path or current_path == "/default/path":
+            current_path = ""
+
+        directory = QFileDialog.getExistingDirectory(
+            None,
+            "Select Download Directory",
+            current_path,
+            QFileDialog.Option.ShowDirsOnly
+        )
+
+        if directory:
+            self.download_path_edit.setText(directory)
 
 
 def create_animated_button(text: str, primary: bool = True) -> QPushButton:

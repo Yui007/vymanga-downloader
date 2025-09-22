@@ -182,17 +182,36 @@ class ConversionWorker(QThread):
             # Create converter instance
             converter = MangaConverter()
 
+            # Filter to only chapters that have download paths (were actually downloaded)
+            downloadable_chapters = [ch for ch in self.manga.chapters if ch.download_path]
+
+            if not downloadable_chapters:
+                self.signals.conversion_error.emit("No downloaded chapters found for conversion")
+                return
+
+            # Create a temporary manga object with only the downloaded chapters
+            temp_manga = Manga(
+                title=self.manga.title,
+                url=self.manga.url,
+                author=self.manga.author,
+                status=self.manga.status,
+                genres=self.manga.genres,
+                summary=self.manga.summary,
+                cover_url=self.manga.cover_url,
+                chapters=downloadable_chapters
+            )
+
             success = False
 
             if self.output_format == 'pdf':
                 success = converter.convert_manga_to_pdf(
-                    self.manga,
+                    temp_manga,
                     separate_chapters=self.separate_chapters,
                     delete_images=self.delete_images
                 )
             elif self.output_format == 'cbz':
                 success = converter.convert_manga_to_cbz(
-                    self.manga,
+                    temp_manga,
                     separate_chapters=self.separate_chapters,
                     delete_images=self.delete_images
                 )

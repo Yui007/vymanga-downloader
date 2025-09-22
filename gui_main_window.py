@@ -364,7 +364,30 @@ class MainWindow(QMainWindow):
         self.scraping_progress.setVisible(False)
         self.scraping_status.setText(f"Error: {error}")
 
-        QMessageBox.critical(self, "Scraping Error", error)
+        msg_box = QMessageBox(self)
+        msg_box.setWindowTitle("Scraping Error")
+        msg_box.setText(error)
+        msg_box.setIcon(QMessageBox.Icon.Critical)
+        msg_box.setStyleSheet(f"""
+            QMessageBox {{
+                background: {theme.BG_PRIMARY};
+                color: {theme.TEXT_PRIMARY};
+            }}
+            QMessageBox QLabel {{
+                color: {theme.TEXT_PRIMARY};
+                background: {theme.BG_PRIMARY};
+            }}
+            QMessageBox QPushButton {{
+                background: qlineargradient(x1: 0, y1: 0, x2: 0, y2: 1,
+                                          stop: 0 {theme.ERROR_COLOR},
+                                          stop: 1 {theme.WARNING_COLOR});
+                color: {theme.TEXT_PRIMARY};
+                border: none;
+                border-radius: 6px;
+                padding: 8px 16px;
+            }}
+        """)
+        msg_box.exec()
         self.status_bar.showMessage("Scraping failed")
 
     def update_manga_details(self):
@@ -480,7 +503,30 @@ class MainWindow(QMainWindow):
     def on_download_error(self, item_id: str, error: str):
         """Handle download error."""
         self.status_bar.showMessage(f"Download failed: {item_id}")
-        QMessageBox.critical(self, "Download Error", f"Failed to download {item_id}: {error}")
+        msg_box = QMessageBox(self)
+        msg_box.setWindowTitle("Download Error")
+        msg_box.setText(f"Failed to download {item_id}: {error}")
+        msg_box.setIcon(QMessageBox.Icon.Critical)
+        msg_box.setStyleSheet(f"""
+            QMessageBox {{
+                background: {theme.BG_PRIMARY};
+                color: {theme.TEXT_PRIMARY};
+            }}
+            QMessageBox QLabel {{
+                color: {theme.TEXT_PRIMARY};
+                background: {theme.BG_PRIMARY};
+            }}
+            QMessageBox QPushButton {{
+                background: qlineargradient(x1: 0, y1: 0, x2: 0, y2: 1,
+                                          stop: 0 {theme.ERROR_COLOR},
+                                          stop: 1 {theme.WARNING_COLOR});
+                color: {theme.TEXT_PRIMARY};
+                border: none;
+                border-radius: 6px;
+                padding: 8px 16px;
+            }}
+        """)
+        msg_box.exec()
 
     def start_conversion(self, item_id: str, output_format: str):
         """Start format conversion."""
@@ -513,13 +559,58 @@ class MainWindow(QMainWindow):
     def on_conversion_finished(self, format_name: str):
         """Handle conversion finished."""
         self.status_bar.showMessage(f"Conversion to {format_name} completed successfully!")
-        QMessageBox.information(self, "Conversion Complete",
-                              f"Successfully converted manga to {format_name} format!")
+        msg_box = QMessageBox(self)
+        msg_box.setWindowTitle("Conversion Complete")
+        msg_box.setText(f"Successfully converted manga to {format_name} format!")
+        msg_box.setIcon(QMessageBox.Icon.Information)
+        msg_box.setStyleSheet(f"""
+            QMessageBox {{
+                background: {theme.BG_PRIMARY};
+                color: {theme.TEXT_PRIMARY};
+            }}
+            QMessageBox QLabel {{
+                color: {theme.TEXT_PRIMARY};
+                background: {theme.BG_PRIMARY};
+            }}
+            QMessageBox QPushButton {{
+                background: qlineargradient(x1: 0, y1: 0, x2: 0, y2: 1,
+                                          stop: 0 {theme.SUCCESS_COLOR},
+                                          stop: 1 {theme.ACCENT_COLOR});
+                color: {theme.TEXT_PRIMARY};
+                border: none;
+                border-radius: 6px;
+                padding: 8px 16px;
+            }}
+        """)
+        msg_box.exec()
 
     def on_conversion_error(self, error: str):
         """Handle conversion error."""
         self.status_bar.showMessage("Conversion failed")
-        QMessageBox.critical(self, "Conversion Error", f"Conversion failed: {error}")
+        msg_box = QMessageBox(self)
+        msg_box.setWindowTitle("Conversion Error")
+        msg_box.setText(f"Conversion failed: {error}")
+        msg_box.setIcon(QMessageBox.Icon.Critical)
+        msg_box.setStyleSheet(f"""
+            QMessageBox {{
+                background: {theme.BG_PRIMARY};
+                color: {theme.TEXT_PRIMARY};
+            }}
+            QMessageBox QLabel {{
+                color: {theme.TEXT_PRIMARY};
+                background: {theme.BG_PRIMARY};
+            }}
+            QMessageBox QPushButton {{
+                background: qlineargradient(x1: 0, y1: 0, x2: 0, y2: 1,
+                                          stop: 0 {theme.ERROR_COLOR},
+                                          stop: 1 {theme.WARNING_COLOR});
+                color: {theme.TEXT_PRIMARY};
+                border: none;
+                border-radius: 6px;
+                padding: 8px 16px;
+            }}
+        """)
+        msg_box.exec()
 
     def on_settings_changed(self, settings: dict):
         """Handle settings changes."""
