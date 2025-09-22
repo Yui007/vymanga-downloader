@@ -123,24 +123,75 @@ class MangaCard(ModernCard):
 
     def load_cover_image(self):
         """Load and display the manga cover image."""
-        # This would typically load the image from URL
-        # For now, we'll show a placeholder
-        placeholder_text = create_styled_label("Cover", "subtitle")
-        placeholder_text.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        if not self.manga.cover_url:
+            # Show placeholder if no cover URL
+            self.cover_label.setText("📖")
+            self.cover_label.setStyleSheet(f"""
+                QLabel {{
+                    background: qlineargradient(x1: 0, y1: 0, x2: 0, y2: 1,
+                                              stop: 0 {theme.PRIMARY_COLOR},
+                                              stop: 1 {theme.SECONDARY_COLOR});
+                    border: 2px solid {theme.BORDER_PRIMARY};
+                    border-radius: 8px;
+                    font-size: 48px;
+                    color: {theme.TEXT_PRIMARY};
+                }}
+            """)
+            return
 
-        # Create a simple colored rectangle as placeholder
-        self.cover_label.setText("📖")
-        self.cover_label.setStyleSheet(f"""
-            QLabel {{
-                background: qlineargradient(x1: 0, y1: 0, x2: 0, y2: 1,
-                                          stop: 0 {theme.PRIMARY_COLOR},
-                                          stop: 1 {theme.SECONDARY_COLOR});
-                border: 2px solid {theme.BORDER_PRIMARY};
-                border-radius: 8px;
-                font-size: 48px;
-                color: {theme.TEXT_PRIMARY};
-            }}
-        """)
+        # Load image from URL using requests and QPixmap
+        try:
+            import requests
+            from PyQt6.QtCore import QByteArray
+
+            # Download image data
+            response = requests.get(self.manga.cover_url, timeout=10)
+            response.raise_for_status()
+
+            # Convert to QPixmap
+            image_data = QByteArray(response.content)
+            pixmap = QPixmap()
+            pixmap.loadFromData(image_data)
+
+            if not pixmap.isNull():
+                # Scale pixmap to fit the label
+                scaled_pixmap = pixmap.scaled(
+                    self.cover_label.size(),
+                    Qt.AspectRatioMode.KeepAspectRatio,
+                    Qt.TransformationMode.SmoothTransformation
+                )
+                self.cover_label.setPixmap(scaled_pixmap)
+                return
+
+            # If loading failed, show error placeholder
+            self.cover_label.setText("❌")
+            self.cover_label.setStyleSheet(f"""
+                QLabel {{
+                    background: qlineargradient(x1: 0, y1: 0, x2: 0, y2: 1,
+                                              stop: 0 {theme.ERROR_COLOR},
+                                              stop: 1 {theme.WARNING_COLOR});
+                    border: 2px solid {theme.BORDER_PRIMARY};
+                    border-radius: 8px;
+                    font-size: 24px;
+                    color: {theme.TEXT_PRIMARY};
+                }}
+            """)
+
+        except Exception as e:
+            # If any error occurs, show placeholder
+            print(f"Failed to load cover image: {e}")  # Use print instead of logger
+            self.cover_label.setText("📖")
+            self.cover_label.setStyleSheet(f"""
+                QLabel {{
+                    background: qlineargradient(x1: 0, y1: 0, x2: 0, y2: 1,
+                                              stop: 0 {theme.PRIMARY_COLOR},
+                                              stop: 1 {theme.SECONDARY_COLOR});
+                    border: 2px solid {theme.BORDER_PRIMARY};
+                    border-radius: 8px;
+                    font-size: 48px;
+                    color: {theme.TEXT_PRIMARY};
+                }}
+            """)
 
 
 class ChapterListWidget(QWidget):
@@ -177,17 +228,20 @@ class ChapterListWidget(QWidget):
 
         layout.addLayout(header_layout)
 
-        # Scroll area for chapters
+        # Scroll area for chapters - make it wider
         scroll = QScrollArea()
         scroll.setWidgetResizable(True)
         scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAsNeeded)
         scroll.setVerticalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAsNeeded)
+        scroll.setMinimumHeight(400)  # Make it taller
+        scroll.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding)
         apply_widget_style(scroll, "card")
 
-        # Container for checkboxes
+        # Container for checkboxes - make it wider
         self.checkbox_container = QWidget()
+        self.checkbox_container.setMinimumWidth(600)  # Make it wider
         self.checkbox_layout = QVBoxLayout(self.checkbox_container)
-        self.checkbox_layout.setSpacing(5)
+        self.checkbox_layout.setSpacing(8)  # More spacing between items
 
         scroll.setWidget(self.checkbox_container)
         layout.addWidget(scroll)

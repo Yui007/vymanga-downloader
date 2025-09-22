@@ -10,3 +10,7 @@ tqdm>=4.64.0
 
 # Optional: For colored terminal output
 colorama>=0.4.6
+
+# GUI dependencies (PyQt6)
+PyQt6>=6.4.0
+PyQt6-sip>=13.4.0
