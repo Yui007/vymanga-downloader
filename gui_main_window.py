@@ -380,6 +380,9 @@ class MainWindow(QMainWindow):
             self.current_settings.get('image_workers', 4)
         )
 
+        # Connect progress signals
+        self.download_worker.signals.download_progress.connect(self.on_download_progress)
+
         self.download_worker.signals.download_started.connect(self.on_download_started)
         self.download_worker.signals.download_progress.connect(self.on_download_progress)
         self.download_worker.signals.download_finished.connect(self.on_download_finished)
@@ -422,6 +425,11 @@ class MainWindow(QMainWindow):
         """Start format conversion."""
         if not self.manga:
             return
+
+        # Make sure manga has download path set
+        download_path = self.current_settings.get('download_path', get_download_path())
+        if not self.manga.download_path:
+            self.manga.create_download_structure(download_path)
 
         # Create conversion worker
         self.conversion_worker = ConversionWorker(
