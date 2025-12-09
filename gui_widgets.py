@@ -274,15 +274,17 @@ class ChapterListWidget(QWidget):
                 QCheckBox {{
                     color: {theme.TEXT_PRIMARY};
                     background: transparent;
-                    padding: 5px;
-                    border-radius: 4px;
+                    padding: 8px 10px;
+                    border-radius: 6px;
+                    margin: 2px 0;
                 }}
                 QCheckBox:hover {{
                     background: {theme.BG_HOVER};
                 }}
                 QCheckBox::indicator {{
-                    width: 16px;
-                    height: 16px;
+                    width: 18px;
+                    height: 18px;
+                    margin-right: 8px;
                 }}
                 QCheckBox::indicator:checked {{
                     background: qlineargradient(x1: 0, y1: 0, x2: 0, y2: 1,
