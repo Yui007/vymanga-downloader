@@ -161,6 +161,8 @@ class MainWindow(QMainWindow):
         self.chapter_list.chapter_selection_changed.connect(self.on_chapter_selection_changed)
         self.chapter_layout.addWidget(self.chapter_list)
 
+
+
         # Download button
         download_btn_layout = QHBoxLayout()
         download_btn_layout.addStretch()

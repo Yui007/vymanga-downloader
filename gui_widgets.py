@@ -228,23 +228,30 @@ class ChapterListWidget(QWidget):
 
         layout.addLayout(header_layout)
 
-        # Scroll area for chapters - make it wider
+        # Scroll area for chapters - make it properly resizable
         scroll = QScrollArea()
         scroll.setWidgetResizable(True)
         scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAsNeeded)
         scroll.setVerticalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAsNeeded)
-        scroll.setMinimumHeight(400)  # Make it taller
+        scroll.setMinimumHeight(300)  # Reduced minimum height
+        scroll.setMaximumHeight(600)  # Add maximum height to prevent excessive stretching
         scroll.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding)
         apply_widget_style(scroll, "card")
 
-        # Container for checkboxes - make it wider
+        # Container for checkboxes - ensure proper sizing
         self.checkbox_container = QWidget()
-        self.checkbox_container.setMinimumWidth(600)  # Make it wider
+        self.checkbox_container.setMinimumWidth(500)  # Slightly reduced minimum width
+        self.checkbox_container.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Preferred)
         self.checkbox_layout = QVBoxLayout(self.checkbox_container)
         self.checkbox_layout.setSpacing(8)  # More spacing between items
+        self.checkbox_layout.setContentsMargins(10, 10, 10, 10)  # Add margins
+        self.checkbox_layout.addStretch()  # Add stretch at the end to push content up
 
         scroll.setWidget(self.checkbox_container)
         layout.addWidget(scroll)
+
+        # Add stretch to ensure proper layout expansion
+        layout.addStretch()
 
     def set_chapters(self, chapters: list[Chapter]):
         """Set the chapters to display."""
