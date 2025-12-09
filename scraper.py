@@ -223,7 +223,7 @@ class VymangaScraper:
                         published_date = None  # For now, skip parsing relative dates
 
                 chapter = Chapter(
-                    title=f"Chapter {chapter_number}",
+                    title=chapter_title,
                     number=chapter_number,
                     url=chapter_url,
                     published_date=published_date
