@@ -190,7 +190,7 @@ class VymangaScraper:
 
         for link in chapter_links:
             try:
-                # Extract chapter number from text
+                # Extract chapter number and title from text
                 chapter_text = link.get_text(strip=True)
                 chapter_match = re.search(r'Chapter\s+(\d+(?:\.\d+)?)', chapter_text, re.IGNORECASE)
 
@@ -198,6 +198,20 @@ class VymangaScraper:
                     continue
 
                 chapter_number = float(chapter_match.group(1))
+
+                # Extract chapter title - everything after "Chapter X.X : "
+                title_match = re.search(r'Chapter\s+\d+(?:\.\d+)?\s*:\s*(.+)', chapter_text, re.IGNORECASE)
+                if title_match:
+                    full_title = title_match.group(1).strip()
+                    # If the title starts with "Ch X.X :", remove it to avoid duplication
+                    ch_prefix_match = re.match(r'Ch\s+\d+(?:\.\d+)?\s*:\s*(.+)', full_title, re.IGNORECASE)
+                    if ch_prefix_match:
+                        chapter_title = ch_prefix_match.group(1).strip()
+                    else:
+                        chapter_title = full_title
+                else:
+                    # Fallback to default title if no title found
+                    chapter_title = f"Chapter {chapter_number}"
 
                 # Extract chapter URL
                 chapter_url = link.get('href')
@@ -220,7 +234,7 @@ class VymangaScraper:
                         published_date = None  # For now, skip parsing relative dates
 
                 chapter = Chapter(
-                    title=f"Chapter {chapter_number}",
+                    title=chapter_title,
                     number=chapter_number,
                     url=chapter_url,
                     published_date=published_date
