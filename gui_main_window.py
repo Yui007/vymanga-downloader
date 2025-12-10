@@ -11,6 +11,7 @@ from PyQt6.QtWidgets import (
 )
 from PyQt6.QtCore import Qt, QTimer
 from PyQt6.QtGui import QFont, QIcon
+import threading
 
 from styles import apply_widget_style, create_styled_label, theme
 from gui_widgets import (
@@ -473,6 +474,7 @@ class MainWindow(QMainWindow):
         self.download_worker.signals.download_progress.connect(self.on_download_progress)
         self.download_worker.signals.download_finished.connect(self.on_download_finished)
         self.download_worker.signals.download_error.connect(self.on_download_error)
+        self.download_worker.signals.resolve_conflict.connect(self.on_resolve_conflict)
 
         self.download_worker.start()
 
@@ -529,6 +531,60 @@ class MainWindow(QMainWindow):
             }}
         """)
         msg_box.exec()
+
+    def on_resolve_conflict(self, title: str, context: dict, event: threading.Event):
+        """Handle download conflict resolution."""
+        # Use a local method to show dialog to ensure it runs on main thread context safely
+        msg_box = QMessageBox(self)
+        msg_box.setWindowTitle("Duplicate Chapter")
+        msg_box.setText(f"Chapter '{title}' already exists.")
+        msg_box.setInformativeText("What would you like to do?")
+        
+        replace_btn = msg_box.addButton("Replace", QMessageBox.ButtonRole.DestructiveRole)
+        keep_both_btn = msg_box.addButton("Keep Both", QMessageBox.ButtonRole.ActionRole)
+        # Add overwrite/merge as Cancel/Default? Or just close means merge/ignore
+        
+        msg_box.setIcon(QMessageBox.Icon.Question)
+        
+        # Apply style
+        msg_box.setStyleSheet(f"""
+             QMessageBox {{
+                 background: {theme.BG_PRIMARY};
+                 color: {theme.TEXT_PRIMARY};
+             }}
+             QMessageBox QLabel {{
+                 color: {theme.TEXT_PRIMARY};
+                 background: {theme.BG_PRIMARY};
+             }}
+             QPushButton {{
+                 color: {theme.TEXT_PRIMARY};
+                 border-radius: 4px;
+                 padding: 5px 15px;
+                 border: 1px solid {theme.BORDER_PRIMARY};
+             }}
+             QPushButton[text="Replace"] {{
+                 background-color: {theme.ERROR_COLOR};
+                 color: white;
+                 border: none;
+             }}
+             QPushButton[text="Keep Both"] {{
+                 background-color: {theme.ACCENT_COLOR};
+                 color: white;
+                 border: none;
+             }}
+        """)
+        
+        msg_box.exec()
+        
+        clicked = msg_box.clickedButton()
+        if clicked == replace_btn:
+            context['action'] = 'replace'
+        elif clicked == keep_both_btn:
+            context['action'] = 'keep_both'
+        else:
+            context['action'] = 'merge'
+            
+        event.set()
 
     def start_conversion(self, item_id: str, output_format: str):
         """Start format conversion."""
