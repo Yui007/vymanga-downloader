@@ -119,6 +119,7 @@ class MangaDownloader:
         
         # Conflict resolution
         self.conflict_callback = None
+        self.default_conflict_action = 'merge'  # Default for CLI/non-interactive: merge/overwrite
         self._active_paths = set()
 
     def set_conflict_callback(self, callback: Callable[[str], str]):
@@ -240,9 +241,20 @@ class MangaDownloader:
                         break
                 
                 # Handle conflict outside lock to avoid blocking other threads during user input
-                if self.conflict_callback:
+                if conflict_type:
                     logger.info(f"Conflict detected for {chapter.title} ({conflict_type})")
-                    action = self.conflict_callback(chapter.title)
+                    
+                    if self.conflict_callback:
+                        action = self.conflict_callback(chapter.title)
+                    else:
+                        # Use default action if no callback
+                        action = self.default_conflict_action
+                        
+                        # Safety check: if active conflict, 'merge' is unsafe (race condition).
+                        # Force 'keep_both' for active conflicts in headless mode to prevent corruption.
+                        if conflict_type == 'active' and action in ('merge', 'replace'):
+                            logger.warning(f"Active conflict detected in headless mode, forcing 'keep_both' to prevent race condition.")
+                            action = 'keep_both'
                     
                     if action == 'replace':
                         logger.info(f"Replacing chapter: {chapter.title}")
@@ -253,24 +265,23 @@ class MangaDownloader:
                                 continue
                             except Exception as e:
                                 logger.warning(f"Failed to clear existing chapter directory: {e}")
-                                # Use default behavior (merge) if delete fails?
-                                # Or just proceed to claim and let it error/merge?
-                                # Let's proceed to claim in next iteration
+                                # Proceed to claim/merge if deletion fails
                                 pass
                                 
                         elif conflict_type == 'active':
-                            # Cannot safely replace active download.
-                            # Fallback to keep both or just proceed (merge)?
-                            # Let's force Keep Both for safety and to ensure user gets the data
                             logger.warning(f"Cannot replace active download for {chapter.title}, switching to Keep Both")
                             action = 'keep_both'
                     
                     if action == 'keep_both':
                         logger.info(f"Keeping both versions for: {chapter.title}")
                         counter = 1
-                        new_folder = current_folder_name
+                        # Don't reset to base_folder_name, continue incrementing from current or base
+                        # Actually we should start from base_folder_name + counter
+                        # because current_folder_name might already be Chapter_1_1
+                        search_base = base_folder_name
+                        
                         while True:
-                            new_folder = f"{base_folder_name}_{counter}"
+                            new_folder = f"{search_base}_{counter}"
                             new_path = os.path.join(manga.download_path, new_folder)
                             
                             # Check if this new candidate is also taken
@@ -281,18 +292,14 @@ class MangaDownloader:
                             counter += 1
                         continue
                 
-                # If no callback or passive action (merge), break and proceed
-                # (We need to claim it though, so we loop again)
-                # But if we just break here we didn't claim it.
-                # Actually, if we want to "Merge", we should just claim it.
-                # But we can't claim it if it's "active" (another thread owning it).
-                # If 'active' and action is 'merge', we are effectively writing into same dir?
-                # That creates race condition on files.
-                # Ideally we should wait or skip?
-                # Assuming "Merge" means "Use this directory".
+                # If no conflict (already handled above) or action is 'merge', claim and break
                 with self._lock:
-                    self._active_paths.add(chapter_path)
-                    break
+                    if chapter_path not in self._active_paths: # Double check
+                         self._active_paths.add(chapter_path)
+                         break
+                    else:
+                         # If it became active while we were deciding (race condition), loop again
+                         continue
 
         except Exception as e:
             logger.error(f"Error resolving chapter path: {e}")
