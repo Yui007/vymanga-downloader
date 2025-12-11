@@ -2,7 +2,7 @@
 
 A modern, powerful, and elegant manga downloader with both **interactive CLI** and a **mind-blowing GUI**.
 
-**VYManga Downloader** is your ultimate solution for downloading manga from vymanga.co with a beautiful, user-friendly interface. Whether you prefer the command line for quick downloads or a sleek graphical interface with smooth animations, this tool has you covered. Built with Python and PyQt6, it features multi-threaded downloads, format conversion to PDF/CBZ, and a modern dark-themed GUI that makes manga downloading a delightful experience.
+**VYManga Downloader** is your ultimate solution for downloading manga from vymanga.co with a beautiful, user-friendly interface. Whether you prefer the command line for quick downloads or a sleek graphical interface with smooth animations, this tool has you covered. Built with Python and PyQt6, it features multi-threaded downloads, format conversion to PDF/CBZ, and a modern dark-themed GUI that makes manga downloading a Delightful Experience.
 
 
 ## 🎨 GUI Preview
