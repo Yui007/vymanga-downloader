@@ -188,7 +188,7 @@ class VymangaScraper:
         # Find all chapter links
         chapter_links = chapter_list_div.find_all('a', class_='list-group-item')
 
-        for link in chapter_links:
+        for link in reversed(chapter_links): # from old to new
             try:
                 # Extract chapter number from id
                 chapter_match = re.findall(r'chapter-(\d+(?:\.\d+)?)', link.get('id'))
@@ -203,6 +203,7 @@ class VymangaScraper:
                 title_match = re.search(r'Chapter\s+\d+(?:\.\d+)?\s*:\s*(.+)', chapter_text, re.IGNORECASE)
                 if title_match:
                     full_title = title_match.group(1).strip()
+
                     # If the title starts with "Ch X.X :", remove it to avoid duplication
                     ch_prefix_match = re.match(r'Ch\s+\d+(?:\.\d+)?\s*:\s*(.+)', full_title, re.IGNORECASE)
                     if ch_prefix_match:

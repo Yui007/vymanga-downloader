@@ -5,6 +5,7 @@ Handles scraping, downloading, and converting operations in separate threads.
 
 from PyQt6.QtCore import QThread, pyqtSignal, QObject
 from PyQt6.QtWidgets import QApplication
+import threading
 import time
 import traceback
 
@@ -29,6 +30,7 @@ class WorkerSignals(QObject):
     download_progress = pyqtSignal(str, int, int, str)  # item_id, current, total, status
     download_finished = pyqtSignal(str)
     download_error = pyqtSignal(str, str)  # item_id, error
+    resolve_conflict = pyqtSignal(str, dict, object)  # title, context, event
 
     # Conversion signals
     conversion_started = pyqtSignal(str)
@@ -117,6 +119,16 @@ class DownloadWorker(QThread):
                 chapter_workers=self.chapter_workers,
                 image_workers=self.image_workers
             )
+
+            # Add conflict handler
+            def conflict_handler(title):
+                context = {'action': 'merge'}  # default
+                event = threading.Event()
+                self.signals.resolve_conflict.emit(title, context, event)
+                event.wait()
+                return context.get('action', 'merge')
+            
+            downloader.set_conflict_callback(conflict_handler)
 
             # Add progress callback to emit signals
             def progress_callback(progress):
