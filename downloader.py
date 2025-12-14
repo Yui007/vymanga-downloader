@@ -4,6 +4,7 @@ Handles concurrent downloads with retries and progress tracking.
 """
 
 import os
+import shutil
 import time
 import threading
 from concurrent.futures import ThreadPoolExecutor, as_completed
@@ -115,6 +116,15 @@ class MangaDownloader:
         # Threading
         self._stop_event = threading.Event()
         self._lock = threading.Lock()
+        
+        # Conflict resolution
+        self.conflict_callback = None
+        self.default_conflict_action = 'merge'  # Default for CLI/non-interactive: merge/overwrite
+        self._active_paths = set()
+
+    def set_conflict_callback(self, callback: Callable[[str], str]):
+        """Set the callback for handling file conflicts."""
+        self.conflict_callback = callback
 
     def add_progress_callback(self, callback: Callable[[DownloadProgress], None]):
         """
@@ -205,16 +215,102 @@ class MangaDownloader:
             logger.warning(f"No pages found for chapter: {chapter.title}")
             return False
 
-        # Create chapter directory
         if not manga.download_path:
             logger.error("Manga download path not set")
             return False
 
-        chapter_path = os.path.join(manga.download_path, chapter.chapter_folder_name)
+        # Path resolution and conflict handling loop
+        base_folder_name = chapter.chapter_folder_name
+        current_folder_name = base_folder_name
+        chapter_path = ""
+        
+        try:
+            while True:
+                chapter_path = os.path.join(manga.download_path, current_folder_name)
+                conflict_type = None
+                
+                with self._lock:
+                    if chapter_path in self._active_paths:
+                        conflict_type = 'active'
+                    elif os.path.exists(chapter_path) and os.path.isdir(chapter_path) and os.listdir(chapter_path):
+                        conflict_type = 'disk'
+                    
+                    if not conflict_type:
+                        # No conflict, claim the path
+                        self._active_paths.add(chapter_path)
+                        break
+                
+                # Handle conflict outside lock to avoid blocking other threads during user input
+                if conflict_type:
+                    logger.info(f"Conflict detected for {chapter.title} ({conflict_type})")
+                    
+                    if self.conflict_callback:
+                        action = self.conflict_callback(chapter.title)
+                    else:
+                        # Use default action if no callback
+                        action = self.default_conflict_action
+                        
+                        # Safety check: if active conflict, 'merge' is unsafe (race condition).
+                        # Force 'keep_both' for active conflicts in headless mode to prevent corruption.
+                        if conflict_type == 'active' and action in ('merge', 'replace'):
+                            logger.warning(f"Active conflict detected in headless mode, forcing 'keep_both' to prevent race condition.")
+                            action = 'keep_both'
+                    
+                    if action == 'replace':
+                        logger.info(f"Replacing chapter: {chapter.title}")
+                        if conflict_type == 'disk':
+                            try:
+                                shutil.rmtree(chapter_path)
+                                # Loop again to claim
+                                continue
+                            except Exception as e:
+                                logger.warning(f"Failed to clear existing chapter directory: {e}")
+                                # Proceed to claim/merge if deletion fails
+                                pass
+                                
+                        elif conflict_type == 'active':
+                            logger.warning(f"Cannot replace active download for {chapter.title}, switching to Keep Both")
+                            action = 'keep_both'
+                    
+                    if action == 'keep_both':
+                        logger.info(f"Keeping both versions for: {chapter.title}")
+                        counter = 1
+                        # Don't reset to base_folder_name, continue incrementing from current or base
+                        # Actually we should start from base_folder_name + counter
+                        # because current_folder_name might already be Chapter_1_1
+                        search_base = base_folder_name
+                        
+                        while True:
+                            new_folder = f"{search_base}_{counter}"
+                            new_path = os.path.join(manga.download_path, new_folder)
+                            
+                            # Check if this new candidate is also taken
+                            with self._lock:
+                                if new_path not in self._active_paths and not (os.path.exists(new_path) and os.path.isdir(new_path) and os.listdir(new_path)):
+                                    current_folder_name = new_folder
+                                    break
+                            counter += 1
+                        continue
+                
+                # If no conflict (already handled above) or action is 'merge', claim and break
+                with self._lock:
+                    if chapter_path not in self._active_paths: # Double check
+                         self._active_paths.add(chapter_path)
+                         break
+                    else:
+                         # If it became active while we were deciding (race condition), loop again
+                         continue
+
+        except Exception as e:
+            logger.error(f"Error resolving chapter path: {e}")
+            return False
+
         ensure_directory(chapter_path)
         chapter.download_path = chapter_path
 
         logger.info(f"Downloading chapter: {chapter.title} ({len(chapter.pages)} pages)")
+        if current_folder_name != base_folder_name:
+             logger.info(f"Saved to: {current_folder_name}")
 
         # Update progress
         with self._lock:
@@ -224,34 +320,40 @@ class MangaDownloader:
         worker = DownloadWorker(self.session, self.max_retries)
         chapter_success = True
 
-        with ThreadPoolExecutor(max_workers=min(self.image_workers, len(chapter.pages))) as executor:
-            # Submit all pages for download
-            future_to_page = {}
-            for page in chapter.pages:
-                page.file_path = os.path.join(chapter_path, page.filename)
-                future_to_page[executor.submit(worker.download_file, page.url, page.file_path)] = page
+        try:
+            with ThreadPoolExecutor(max_workers=min(self.image_workers, len(chapter.pages))) as executor:
+                # Submit all pages for download
+                future_to_page = {}
+                for page in chapter.pages:
+                    page.file_path = os.path.join(chapter_path, page.filename)
+                    future_to_page[executor.submit(worker.download_file, page.url, page.file_path)] = page
 
-            # Process completed downloads
-            for future in as_completed(future_to_page):
-                page = future_to_page[future]
-                try:
-                    success = future.result()
-                    page.downloaded = success
+                # Process completed downloads
+                for future in as_completed(future_to_page):
+                    page = future_to_page[future]
+                    try:
+                        success = future.result()
+                        page.downloaded = success
 
-                    # Update progress
-                    with self._lock:
-                        self.progress.downloaded_files += 1
-                        self.progress.current_file = page.filename
+                        # Update progress
+                        with self._lock:
+                            self.progress.downloaded_files += 1
+                            self.progress.current_file = page.filename
 
-                    if success:
-                        logger.debug(f"Downloaded page: {page.filename}")
-                    else:
+                        if success:
+                            logger.debug(f"Downloaded page: {page.filename}")
+                        else:
+                            chapter_success = False
+                            logger.error(f"Failed to download page: {page.filename}")
+
+                    except Exception as e:
                         chapter_success = False
-                        logger.error(f"Failed to download page: {page.filename}")
-
-                except Exception as e:
-                    chapter_success = False
-                    logger.error(f"Error downloading page {page.filename}: {e}")
+                        logger.error(f"Error downloading page {page.filename}: {e}")
+        finally:
+            # Release the path from active paths
+            with self._lock:
+                if chapter_path in self._active_paths:
+                    self._active_paths.remove(chapter_path)
 
         # Mark chapter as downloaded if all pages succeeded
         chapter.downloaded = chapter_success
