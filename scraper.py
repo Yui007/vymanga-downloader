@@ -194,6 +194,18 @@ class VymangaScraper:
             return []
         
         chapters = []
+        
+        chapter_links = []
+        if chapter_list_div:
+            chapter_links = chapter_list_div.find_all('a', class_='list-group-item')
+        else:
+            # Fallback for one-shots or different layouts
+            chapter_links = soup.select('a[id^=chapter-]')
+
+        if not chapter_links:
+            logger.warning("No chapters found")
+            return chapters
+
         for link in reversed(chapter_links): # from old to new
             try:
                 # Extract chapter number from id
